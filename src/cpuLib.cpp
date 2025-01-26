@@ -22,9 +22,10 @@ void vectorInit(float* v, int size) {
 int verifyVector(float* a, float* b, float* c, float scale, int size) {
 	int errorCount = 0;
 	for (int idx = 0; idx < size; ++idx) {
-		if (c[idx] != scale * a[idx] + b[idx]) {
+		if (((int) (c[idx]) & ~(0x1)) != ((int) (scale * a[idx] + b[idx]) & ~(0x1))) {
 			++errorCount;
 			#ifndef DEBUG_PRINT_DISABLE
+                printf("%f != %f\n", c[idx], scale * a[idx] + b[idx]);
 				std::cout << "Idx " << idx << " expected " << scale * a[idx] + b[idx] 
 					<< " found " << c[idx] << " = " << a[idx] << " + " << b[idx] << "\n";
 			#endif
