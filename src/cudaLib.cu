@@ -1,5 +1,6 @@
 
 #include "cudaLib.cuh"
+#include <fenv.h>
 
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort)
 {
@@ -14,10 +15,13 @@ __global__
 void saxpy_gpu (float* x, float* y, float scale, int size) {
     // get current thread index, 1D
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    float mul;
     
     // check to make sure inside bounds
     if (idx < size) {
-        y[idx] = x[idx] * scale + y[idx];
+        mul = __fmul_rn(x[idx], scale);
+        y[idx] = __fadd_rn(y[idx], mul);
+        //y[idx] = x[idx] * scale + y[idx];
     }
 
     return;
@@ -28,6 +32,9 @@ int runGpuSaxpy(int vectorSize) {
 	std::cout << "Hello GPU Saxpy!\n";
 
 	cudaDeviceProp devprop;
+
+    // set rounding mode
+    fesetround(FE_TONEAREST);
 	
 	//  Check CUDA device presence
 	int numDev;
@@ -48,12 +55,14 @@ int runGpuSaxpy(int vectorSize) {
     #endif
 
     float *x, *y, *y_new;
+    volatile float *scale_mem;
     float scale;
 
     // allocate space for the arrays
     x = (float *) malloc(vectorSize * sizeof(*x));
     y = (float *) malloc(vectorSize * sizeof(*y));
     y_new = (float *) malloc(vectorSize * sizeof(*y_new));
+    scale_mem = (float *) malloc(sizeof(*scale_mem));
 
     if (x == NULL || y == NULL || y_new == NULL) {
         printf("Memory allocation failed, exiting\n");
@@ -64,8 +73,9 @@ int runGpuSaxpy(int vectorSize) {
 
     // generate a random float for the scale
     //scale = (float) (rand() % 100);
-    scale = (float) (rand()) / (float) (rand());
-    //scale = 1.5f;
+    //scale = (float) (rand()) / (float) (rand());
+    *scale_mem = 2.1f;
+    scale = *scale_mem;
 
     // generate random floats for the vectors
     for (int i = 0; i < vectorSize; i++) {
@@ -92,7 +102,7 @@ int runGpuSaxpy(int vectorSize) {
     // generate block num and thread block size
     // use max size thread blocks for now
     int num_threads_per_block = devprop.maxThreadsPerBlock;
-    int num_blocks = vectorSize / num_threads_per_block;
+    int num_blocks = (vectorSize / num_threads_per_block) + 1;
 
     // allocate memory and transfer
     float *x_device, *y_device;
@@ -201,7 +211,7 @@ double estimatePi(uint64_t generateThreadCount, uint64_t sampleSize,
     cudaMalloc(&d_pSums, generateThreadCount*sizeof(*d_pSums));
 
     int num_threads_per_block = 1024;
-    int num_blocks = ceil(generateThreadCount / num_threads_per_block);
+    int num_blocks = generateThreadCount / num_threads_per_block + 1;
 
     generatePoints<<<num_blocks, num_threads_per_block>>>(d_pSums, generateThreadCount, sampleSize);
 
